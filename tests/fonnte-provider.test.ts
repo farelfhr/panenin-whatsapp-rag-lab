@@ -24,4 +24,21 @@ describe("FonnteProvider", () => {
     ]);
     expect(provider.parseWebhook({ sender: "628", message: "tanpa id" })).toEqual([]);
   });
+
+  it("menerima inboxid Fonnte sebagai ID dedup yang stabil", () => {
+    const provider = new FonnteProvider({ token: "secret-token" });
+
+    expect(provider.parseWebhook({
+      inboxid: "inbox-1",
+      sender: "628",
+      message: "MENU",
+    })).toEqual([
+      expect.objectContaining({
+        providerMessageId: "inbox-1",
+        sender: "628",
+        type: "text",
+        text: "MENU",
+      }),
+    ]);
+  });
 });

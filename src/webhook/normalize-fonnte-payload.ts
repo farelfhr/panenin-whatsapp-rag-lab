@@ -29,7 +29,13 @@ function collectCandidates(payload: unknown): unknown[] {
 function normalizeCandidate(candidate: unknown): NormalizedIncomingMessage[] {
   if (!isRecord(candidate)) return [];
   if (isOutgoing(candidate)) return [];
-  const id = firstString(candidate, ["id", "message_id", "messageId", "provider_message_id"])
+  const id = firstString(candidate, [
+    "id",
+    "inboxid",
+    "message_id",
+    "messageId",
+    "provider_message_id",
+  ])
     ?? nestedString(candidate, ["key", "id"]);
   const sender = firstString(candidate, ["sender", "from", "phone", "number", "target"])
     ?? nestedString(candidate, ["key", "remoteJid"]);

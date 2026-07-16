@@ -22,6 +22,47 @@ function setup() {
 }
 
 describe("webhook", () => {
+  it("mencatat penolakan secret tanpa membocorkan nilainya", async () => {
+    const setupResult = setup();
+    const logError = vi.fn();
+    const handler = createWebhookHandler({
+      provider: setupResult.provider,
+      store: setupResult.store,
+      router: setupResult.router,
+      webhookSecret: "expected-secret",
+      logError,
+    });
+
+    const response = await handler(new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: "{}",
+    }));
+
+    expect(response.status).toBe(401);
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining("secret tidak valid"));
+    expect(logError).not.toHaveBeenCalledWith(expect.stringContaining("expected-secret"));
+  });
+
+  it("menerima secret melalui query token untuk kompatibilitas Fonnte", async () => {
+    const setupResult = setup();
+    const handler = createWebhookHandler({
+      provider: setupResult.provider,
+      store: setupResult.store,
+      router: setupResult.router,
+      webhookSecret: "expected-secret",
+    });
+
+    const response = await handler(new Request("http://localhost/webhook?token=expected-secret", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "msg-query-token", sender: "6281234567890", message: "MENU" }),
+    }));
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ status: "ok", accepted: 1 });
+  });
+
   it("menerima JSON, deduplicate, ack cepat, lalu proses", async () => {
     const setupResult = setup();
     const request = new Request("http://localhost/webhook", {

@@ -35,20 +35,25 @@ copy .env.example .env
 
 Isi `.env` secara lokal. Semua variable divalidasi dengan Zod:
 
-`GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBEDDING_MODEL`, `GEMINI_EMBEDDING_DIMENSION=768`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FONNTE_TOKEN`, `FONNTE_WEBHOOK_SECRET`, `PUBLIC_WEBHOOK_URL`, `NODE_ENV`, dan `LOG_LEVEL`.
+`GEMINI_API_KEY`, `GEMINI_CHAT_MODEL`, `GEMINI_EMBEDDING_MODEL`, `GEMINI_EMBEDDING_DIMENSION=768`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FONNTE_TOKEN`, `FONNTE_WEBHOOK_SECRET`, `PUBLIC_WEBHOOK_URL`, `NODE_ENV`, dan `LOG_LEVEL`. Anon key hanya dipakai server untuk memverifikasi access token Supabase Auth; service-role key hanya dipakai untuk akses database backend.
 
 Jangan menaruh nilai asli di `.env.example`, source, fixture, atau log. Lihat [manual setup checklist](docs/MANUAL_SETUP_CHECKLIST.md).
 
 ## Migration Supabase
 
-Jalankan SQL dari `supabase/migrations/` secara berurutan di SQL Editor atau migration workflow tim:
+Migration versioned `20260716163145_create_isolated_panenin_ai_lab_schema.sql` membuat seluruh objek hanya di schema `panenin_ai_lab`. Schema memakai `extensions.vector(768)`, `knowledge_documents`, `knowledge_chunks`, `match_knowledge`, `incoming_messages`, dan `conversation_sessions`. Keempat tabel memakai RLS tanpa policy `anon`/`authenticated`; hanya service role backend yang mendapat grant minimum.
 
-1. `001_enable_vector.sql`
-2. `002_create_knowledge_tables.sql`
-3. `003_create_match_knowledge.sql`
-4. `004_create_whatsapp_lab_tables.sql`
+Tambahkan `panenin_ai_lab` secara manual di **Project Settings > API > Exposed schemas** tanpa menghapus schema lain. Klien server sudah menetapkan `db.schema` ke `panenin_ai_lab`, sehingga ingestion, retrieval, webhook store, dan RPC tidak lagi memakai schema `public`.
 
-Schema memakai `extensions.vector(768)`, `knowledge_documents`, `knowledge_chunks`, `match_knowledge`, `incoming_messages`, dan `conversation_sessions`. Supabase service-role hanya digunakan oleh proses server/CLI.
+## Supabase Auth dan route terproteksi
+
+Frontend atau client tepercaya melakukan sign-in melalui Supabase Auth dan mengirim access token sebagai `Authorization: Bearer <token>`. Server memverifikasi token menggunakan `auth.getClaims()` sebelum melayani:
+
+```text
+GET /api/protected
+```
+
+Response berhasil hanya berisi status autentikasi dan tidak mengembalikan claim atau data pengguna. `GET /health` tetap publik. `POST /webhook/fonnte` tidak memakai JWT pengguna karena dipanggil provider; endpoint itu tetap dilindungi `FONNTE_WEBHOOK_SECRET` melalui header `x-webhook-secret` atau query `?token=` untuk kompatibilitas provider yang tidak dapat mengirim custom header. Query token hanya untuk demo/tunnel; gunakan proxy atau deployment dengan header verification untuk production karena URL dapat masuk ke log provider/tunnel.
 
 ## Command
 
@@ -85,7 +90,7 @@ Jika tidak ada match atau context tidak cukup, jawaban kanonik adalah `Maaf, pan
 
 `FonnteProvider` membungkus endpoint send, timeout, HTTP non-2xx, dan tidak me-retry send secara otomatis. Normalizer defensif menerima bentuk payload umum sebagai hipotesis; field aktual wajib dikonfirmasi dari satu payload yang disanitasi. Lihat TODO di `src/webhook/normalize-fonnte-payload.ts`.
 
-Jalankan `npm run dev`, lalu expose `POST /webhook/fonnte` dengan tunnel publik (misalnya Cloudflare Tunnel) atau deployment sementara yang disetujui tim. Masukkan URL publik tersebut ke dashboard Fonnte. Laptop harus tetap menyala bila memakai tunnel lokal. `GET /health` tersedia untuk smoke test.
+Jalankan `npm run dev`, lalu expose `POST /webhook/fonnte` dengan tunnel publik (misalnya Cloudflare Tunnel) atau deployment sementara yang disetujui tim. Masukkan URL lengkap `https://<public-host>/webhook/fonnte?token=<url-encoded-FONNTE_WEBHOOK_SECRET>` ke field Webhook Fonnte bila provider tidak mengirim custom header. Jangan mencetak URL tersebut ke log. Laptop harus tetap menyala bila memakai tunnel lokal. `GET /health` tersedia untuk smoke test.
 
 Jangan bergantung pada tombol interaktif WhatsApp atau attachment paket gratis. Demo awal berbasis teks.
 
@@ -96,7 +101,7 @@ Jangan bergantung pada tombol interaktif WhatsApp atau attachment paket gratis. 
 - Embedding mismatch: pastikan model/dimensi 768; re-embed seluruh KB setelah perubahan.
 - RAG kosong: cek migration, ingestion, threshold 0.62, dan similarity.
 - Fonnte offline/nomor salah: cek device connected dan format nomor `62...` tanpa `+`.
-- Webhook tidak masuk: cek URL publik, route `POST`, secret/header yang didukung dashboard, dan log struktur tersanitasi.
+- Webhook tidak masuk: cek URL publik, route `POST`, `Auto Read`, dan query token/header. Untuk tunnel demo, URL harus berakhir dengan `/webhook/fonnte?token=...`; jangan mencetak token atau raw payload.
 - Balasan ganda: pastikan `provider_message_id` unique dan outgoing event difilter.
 - Nomor logout: scan QR ulang dengan nomor demo; jangan gunakan nomor pribadi utama.
 

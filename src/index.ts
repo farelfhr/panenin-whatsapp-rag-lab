@@ -1,9 +1,17 @@
 import "dotenv/config";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { GeminiClient } from "./ai/gemini-client.js";
 import { GeminiEmbeddingService } from "./ai/embedding.js";
+import { handleProtectedRoute, SupabaseAuthVerifier } from "./auth/protected-route.js";
 import { parseFullEnv } from "./config/env.js";
-import { createSupabaseServerClient, SupabaseKnowledgeRepository, SupabaseWebhookStore } from "./database/supabase.js";
+import {
+  createSupabaseAuthClient,
+  createSupabaseServerClient,
+  SupabaseKnowledgeRepository,
+  SupabaseWebhookStore,
+} from "./database/supabase.js";
 import { FonnteProvider } from "./messaging/fonnte-provider.js";
 import { SupabaseRetriever } from "./rag/retrieve.js";
 import { ConversationRouter } from "./conversation/router.js";
@@ -15,6 +23,7 @@ export function createLabServer() {
   const supabase = createSupabaseServerClient(env);
   const repository = new SupabaseKnowledgeRepository(supabase);
   const store = new SupabaseWebhookStore(supabase);
+  const authVerifier = new SupabaseAuthVerifier(createSupabaseAuthClient(env));
   const provider = new FonnteProvider({ token: env.FONNTE_TOKEN });
   const retriever = new SupabaseRetriever(repository, new GeminiEmbeddingService(client, env.GEMINI_EMBEDDING_DIMENSION));
   const router = new ConversationRouter({ retriever, gateway: client, sessionStore: store });
@@ -23,6 +32,16 @@ export function createLabServer() {
   return createServer(async (request, response) => {
     if (request.url === "/health" && request.method === "GET") {
       writeResponse(response, new Response("ok", { status: 200 }));
+      return;
+    }
+    if (request.url?.split("?")[0] === "/api/protected") {
+      const authorization = typeof request.headers.authorization === "string"
+        ? request.headers.authorization
+        : undefined;
+      writeResponse(
+        response,
+        await handleProtectedRoute(request.method ?? "GET", authorization, authVerifier),
+      );
       return;
     }
     if (request.url?.split("?")[0] !== "/webhook/fonnte") {
@@ -64,7 +83,8 @@ function writeResponse(response: ServerResponse, result: Response): void {
   void result.text().then((body) => response.end(body));
 }
 
-if (import.meta.url === `file://${process.argv[1]?.replaceAll("\\", "/")}`) {
+const entrypointPath = process.argv[1] ? resolve(process.argv[1]) : undefined;
+if (entrypointPath && entrypointPath === fileURLToPath(import.meta.url)) {
   const port = Number(process.env["PORT"] ?? 3000);
   createLabServer().listen(port, () => console.log(`Panenin lab listening on http://localhost:${port}`));
 }

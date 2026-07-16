@@ -16,12 +16,18 @@ export function createWebhookHandler(dependencies: WebhookHandlerDependencies) {
   const schedule = dependencies.schedule ?? ((task) => queueMicrotask(() => void task()));
   return async function handle(request: Request): Promise<Response> {
     if (request.method.toUpperCase() !== "POST") return new Response("method not allowed", { status: 405 });
-    if (dependencies.webhookSecret && request.headers.get("x-webhook-secret") !== dependencies.webhookSecret) {
+    const suppliedSecret = request.headers.get("x-webhook-secret")
+      ?? new URL(request.url).searchParams.get("token");
+    if (dependencies.webhookSecret && suppliedSecret !== dependencies.webhookSecret) {
+      dependencies.logError?.("Webhook Fonnte ditolak: secret tidak valid atau header tidak tersedia");
       return new Response("unauthorized", { status: 401 });
     }
 
     const payload = await parseRequestPayload(request);
     const messages = dependencies.provider.parseWebhook(payload);
+    if (messages.length === 0) {
+      dependencies.logError?.("Webhook Fonnte diterima tetapi payload tidak memiliki ID/sender yang dikenali");
+    }
     const accepted: NormalizedIncomingMessage[] = [];
     for (const message of messages) {
       if (!message.providerMessageId || !message.sender) continue;

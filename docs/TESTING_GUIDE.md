@@ -15,7 +15,7 @@ Unit test tidak melakukan network call. Gemini, Supabase, dan Fonnte diuji melal
 
 1. M0: selesaikan `MANUAL_SETUP_CHECKLIST.md` yang memerlukan dashboard.
 2. M1: `npm run test:gemini` dan `npm run test:embedding`.
-3. M2: jalankan migration, `npm run rag:ingest`, lalu `npm run rag:test -- "Bagaimana cara packing?"`.
+3. M2: tambahkan `panenin_ai_lab` ke Exposed schemas, `npm run rag:ingest`, lalu `npm run rag:test -- "Bagaimana cara packing?"`.
 4. M3: `npm run fonnte:test -- 628...` dan uji normalizer dengan fixture tersanitasi.
 5. M4-M5: jalankan `npm run dev`, expose `/webhook/fonnte`, lalu uji `MENU`, `TANYA: ...`, `BATAL`, dan fallback dari WhatsApp.
 6. M6: catat payload aktual, hasil log yang sudah disanitasi, dan artefak handoff.
@@ -28,6 +28,7 @@ Unit test tidak melakukan network call. Gemini, Supabase, dan Fonnte diuji melal
 - Fonnte: outbound success, HTTP non-2xx, timeout boundary, dan normalizer defensif.
 - Intent classifier: schema valid, threshold 0,80, dan JSON invalid.
 - Chunker: frontmatter dan overlap.
+- Auth: bearer token wajib, token invalid ditolak, response tidak membocorkan claim, dan method dibatasi ke GET.
 
 ## Uji payload aktual
 

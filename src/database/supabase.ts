@@ -5,14 +5,29 @@ import type { KnowledgeMatch, KnowledgeChunkInput, KnowledgeDocumentInput } from
 import type { KnowledgeRepository } from "../rag/ingest.js";
 import { sanitizePayload } from "../webhook/sanitize.js";
 
-export function createSupabaseServerClient(config: SupabaseEnv): SupabaseClient {
+export const PANENIN_AI_LAB_SCHEMA = "panenin_ai_lab";
+
+export function createSupabaseServerClient(config: SupabaseEnv) {
   return createClient(config.SUPABASE_URL, config.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false, autoRefreshToken: false },
+    db: { schema: PANENIN_AI_LAB_SCHEMA },
+  });
+}
+
+export type PaneninLabSupabaseClient = ReturnType<typeof createSupabaseServerClient>;
+
+export function createSupabaseAuthClient(config: SupabaseEnv): SupabaseClient {
+  return createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
   });
 }
 
 export class SupabaseKnowledgeRepository implements KnowledgeRepository {
-  public constructor(private readonly client: SupabaseClient) {}
+  public constructor(private readonly client: PaneninLabSupabaseClient) {}
 
   public async upsertDocument(input: KnowledgeDocumentInput): Promise<string> {
     const { data, error } = await this.client
@@ -29,7 +44,10 @@ export class SupabaseKnowledgeRepository implements KnowledgeRepository {
       .select("id")
       .single();
     if (error || !data || typeof data["id"] !== "string") {
-      throw new Error("Supabase gagal menyimpan knowledge document");
+      throw createSupabaseOperationError(
+        "Supabase gagal menyimpan knowledge document",
+        error,
+      );
     }
     return data["id"];
   }
@@ -39,7 +57,12 @@ export class SupabaseKnowledgeRepository implements KnowledgeRepository {
       .from("knowledge_chunks")
       .delete()
       .eq("document_id", documentId);
-    if (deleteError) throw new Error("Supabase gagal menghapus chunk knowledge lama");
+    if (deleteError) {
+      throw createSupabaseOperationError(
+        "Supabase gagal menghapus chunk knowledge lama",
+        deleteError,
+      );
+    }
 
     if (chunks.length === 0) return;
     const rows = chunks.map((chunk) => ({
@@ -50,7 +73,12 @@ export class SupabaseKnowledgeRepository implements KnowledgeRepository {
       embedding: chunk.embedding,
     }));
     const { error } = await this.client.from("knowledge_chunks").insert(rows);
-    if (error) throw new Error("Supabase gagal menyimpan chunk knowledge");
+    if (error) {
+      throw createSupabaseOperationError(
+        "Supabase gagal menyimpan chunk knowledge",
+        error,
+      );
+    }
   }
 
   public async matchKnowledge(input: { embedding: number[]; threshold: number; count: number }): Promise<KnowledgeMatch[]> {
@@ -59,7 +87,12 @@ export class SupabaseKnowledgeRepository implements KnowledgeRepository {
       match_threshold: input.threshold,
       match_count: input.count,
     });
-    if (error || !Array.isArray(data)) throw new Error("Supabase gagal mengambil knowledge");
+    if (error || !Array.isArray(data)) {
+      throw createSupabaseOperationError(
+        "Supabase gagal mengambil knowledge",
+        error,
+      );
+    }
     return data.flatMap((row: unknown) => {
       if (!isRecord(row) || typeof row["title"] !== "string" || typeof row["content"] !== "string" || typeof row["similarity"] !== "number") {
         return [];
@@ -76,7 +109,7 @@ export interface WebhookStore {
 }
 
 export class SupabaseWebhookStore implements WebhookStore {
-  public constructor(private readonly client: SupabaseClient) {}
+  public constructor(private readonly client: PaneninLabSupabaseClient) {}
 
   public async claimIncoming(message: NormalizedIncomingMessage, sanitizedRaw: unknown): Promise<boolean> {
     const { error } = await this.client.from("incoming_messages").insert({
@@ -89,7 +122,10 @@ export class SupabaseWebhookStore implements WebhookStore {
     });
     if (!error) return true;
     if (error.code === "23505") return false;
-    throw new Error("Supabase gagal menyimpan incoming message");
+    throw createSupabaseOperationError(
+      "Supabase gagal menyimpan incoming message",
+      error,
+    );
   }
 
   public async resetSession(sender: string): Promise<void> {
@@ -101,12 +137,39 @@ export class SupabaseWebhookStore implements WebhookStore {
       expires_at: null,
       updated_at: new Date().toISOString(),
     });
-    if (error) throw new Error("Supabase gagal mereset conversation session");
+    if (error) {
+      throw createSupabaseOperationError(
+        "Supabase gagal mereset conversation session",
+        error,
+      );
+    }
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function createSupabaseOperationError(
+  operation: string,
+  error: { code?: string; message?: string; hint?: string } | null,
+): Error {
+  if (!error) return new Error(operation);
+
+  const context = [
+    safeErrorField(error.code),
+    safeErrorField(error.message),
+    safeErrorField(error.hint),
+  ].filter((value): value is string => value !== null);
+
+  return new Error(context.length > 0
+    ? `${operation}: ${context.join(" | ")}`
+    : operation);
+}
+
+function safeErrorField(value: string | undefined): string | null {
+  if (!value) return null;
+  return value.replace(/[\r\n]+/g, " ").slice(0, 500);
 }
 
 export function createWebhookStore(config: SupabaseEnv & FonnteEnv): WebhookStore {
