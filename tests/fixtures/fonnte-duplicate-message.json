@@ -1,0 +1,7 @@
+{
+  "id": "msg-demo-001",
+  "sender": "6281234567890",
+  "message": "MENU",
+  "type": "text",
+  "from_me": false
+}
