@@ -3,7 +3,10 @@ import {
   intentClassificationSchema,
   type IntentClassification,
 } from "../types/intent.js";
-import type { GeminiGateway, StructuredSchema } from "./gemini-client.js";
+import type {
+  StructuredSchema,
+  TextGenerationGateway,
+} from "./gateway.js";
 
 const INTENT_SCHEMA: StructuredSchema = {
   type: Type.OBJECT,
@@ -30,7 +33,7 @@ export interface IntentClassifier {
 }
 
 export class GeminiIntentClassifier implements IntentClassifier {
-  public constructor(private readonly gateway: GeminiGateway) {}
+  public constructor(private readonly gateway: TextGenerationGateway) {}
 
   public async classify(message: string): Promise<IntentClassification> {
     const raw = await this.gateway.generateText({

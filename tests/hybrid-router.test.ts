@@ -52,4 +52,27 @@ describe("HybridConversationRouter", () => {
     expect(response).toContain("MENU");
     expect(localRouter.route).not.toHaveBeenCalled();
   });
+
+  it("mempertahankan session yang sama untuk percakapan natural multi-turn", async () => {
+    const localRouter = { route: vi.fn().mockResolvedValue("lokal") };
+    const run = vi.fn().mockResolvedValue({ text: "agent" });
+    const router = new HybridConversationRouter({
+      localRouter,
+      agentGateway: { run },
+      enabled: true,
+      sessionIdFactory: () => "panenin:conversation-stable",
+    });
+
+    await router.route({ sender: "6285", text: "Cabai saya siap minggu depan" });
+    await router.route({ sender: "6285", text: "jumlahnya sekitar 200 kilo" });
+
+    expect(run).toHaveBeenNthCalledWith(1, {
+      internalUserId: "panenin:conversation-stable",
+      message: "Cabai saya siap minggu depan",
+    });
+    expect(run).toHaveBeenNthCalledWith(2, {
+      internalUserId: "panenin:conversation-stable",
+      message: "jumlahnya sekitar 200 kilo",
+    });
+  });
 });

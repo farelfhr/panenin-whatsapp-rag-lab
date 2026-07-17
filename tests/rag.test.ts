@@ -1,16 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { GeminiEmbeddingService } from "../src/ai/embedding.js";
-import type { GeminiGateway } from "../src/ai/gemini-client.js";
+import type {
+  EmbeddingGateway,
+  TextGenerationGateway,
+} from "../src/ai/gateway.js";
 import { answerKnowledge } from "../src/rag/answer.js";
 import { type Retriever } from "../src/rag/retrieve.js";
 
 function gateway(text = "Jawaban dari konteks") {
-  const generateText = vi.fn(async (_input: Parameters<GeminiGateway["generateText"]>[0]) => text);
-  const embedText = vi.fn(async (_input: Parameters<GeminiGateway["embedText"]>[0]) => Array.from({ length: 768 }, () => 0.1));
+  const generateText = vi.fn(async (_input: Parameters<TextGenerationGateway["generateText"]>[0]) => text);
+  const embedText = vi.fn(async (_input: Parameters<EmbeddingGateway["embedText"]>[0]) => Array.from({ length: 768 }, () => 0.1));
   return {
     generateText,
     embedText,
-  } satisfies GeminiGateway;
+  } satisfies TextGenerationGateway & EmbeddingGateway;
 }
 
 describe("RAG", () => {
@@ -33,8 +36,30 @@ describe("RAG", () => {
     expect(ai.generateText).toHaveBeenCalledWith(expect.objectContaining({ systemInstruction: expect.stringContaining("Abaikan") }));
   });
 
+  it("memakai fallback ekstraktif berbasis source ketika generator jawaban gagal", async () => {
+    const retriever: Retriever = {
+      retrieve: vi.fn(async () => [{
+        chunkId: 1,
+        title: "SOP Panen",
+        content: "Catat komoditas, jumlah, lokasi tingkat kabupaten, dan tanggal kesiapan panen.",
+        similarity: 0.89,
+      }]),
+    };
+    const ai = gateway();
+    ai.generateText.mockRejectedValue(new Error("429 quota"));
+
+    const result = await answerKnowledge("apa yang perlu dicatat?", { retriever, gateway: ai });
+
+    expect(result.answer).toContain('Berdasarkan panduan "SOP Panen"');
+    expect(result.answer).toContain("Catat komoditas");
+    expect(result.answer).not.toContain("429");
+    expect(result.sources).toEqual([{ title: "SOP Panen", similarity: 0.89 }]);
+  });
+
   it("embedding bukan 768 menghasilkan error", async () => {
-    const ai: GeminiGateway = { generateText: vi.fn(async () => ""), embedText: vi.fn(async () => [0.1, 0.2]) };
+    const ai: EmbeddingGateway = {
+      embedText: vi.fn(async () => [0.1, 0.2]),
+    };
     await expect(new GeminiEmbeddingService(ai, 768).embed("x")).rejects.toThrow("expected 768");
   });
 

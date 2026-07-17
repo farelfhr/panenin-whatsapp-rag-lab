@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { GeminiIntentClassifier } from "../src/ai/intent-classifier.js";
-import type { GeminiGateway } from "../src/ai/gemini-client.js";
+import type { TextGenerationGateway } from "../src/ai/gateway.js";
 
-function gateway(response: string): GeminiGateway {
-  return { generateText: vi.fn(async () => response), embedText: vi.fn(async () => []) };
+function gateway(response: string): TextGenerationGateway {
+  return { generateText: vi.fn(async () => response) };
 }
 
 describe("intent classifier", () => {

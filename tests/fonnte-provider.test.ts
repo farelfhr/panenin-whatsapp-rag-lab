@@ -30,6 +30,21 @@ describe("FonnteProvider", () => {
     await expect(provider.sendText({ to: "628", text: "halo" })).rejects.not.toThrow("secret-token");
   });
 
+  it("menolak response HTTP 200 yang membawa status false", async () => {
+    const provider = new FonnteProvider({
+      token: "secret-token",
+      fetchFn: vi.fn(async () => new Response(JSON.stringify({
+        status: false,
+        reason: "token invalid",
+      }), { status: 200 })),
+    });
+
+    await expect(provider.sendText({ to: "628", text: "halo" }))
+      .rejects.toThrow("Fonnte menolak token device");
+    await expect(provider.sendText({ to: "628", text: "halo" }))
+      .rejects.not.toThrow("secret-token");
+  });
+
   it("menormalisasi fixture teks dan menolak field yang tidak stabil", () => {
     const provider = new FonnteProvider({ token: "secret-token" });
     expect(provider.parseWebhook({ id: "m1", sender: "628", message: "MENU", from_me: false })).toEqual([
@@ -53,5 +68,24 @@ describe("FonnteProvider", () => {
         text: "MENU",
       }),
     ]);
+  });
+
+  it("mengganti inboxid 0 Fonnte dengan ID hash stabil dari timestamp", () => {
+    const provider = new FonnteProvider({ token: "secret-token" });
+    const payload = {
+      inboxid: 0,
+      sender: "6281234567890",
+      message: "MENU",
+      type: "text",
+      timestamp: 1_789_000_000,
+    };
+
+    const first = provider.parseWebhook(payload);
+    const retry = provider.parseWebhook(payload);
+    const nextMessage = provider.parseWebhook({ ...payload, timestamp: 1_789_000_001 });
+
+    expect(first[0]?.providerMessageId).toMatch(/^fonnte:[a-f0-9]{32}$/);
+    expect(retry[0]?.providerMessageId).toBe(first[0]?.providerMessageId);
+    expect(nextMessage[0]?.providerMessageId).not.toBe(first[0]?.providerMessageId);
   });
 });

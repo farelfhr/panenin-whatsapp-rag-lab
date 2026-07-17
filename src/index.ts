@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { GeminiClient } from "./ai/gemini-client.js";
 import { GeminiEmbeddingService } from "./ai/embedding.js";
+import { GroqClient } from "./ai/groq-client.js";
 import { handleProtectedRoute, SupabaseAuthVerifier } from "./auth/protected-route.js";
 import { parseFullEnv } from "./config/env.js";
 import {
@@ -22,14 +23,31 @@ import { createWebhookHandler } from "./webhook/handler.js";
 
 export function createLabServer() {
   const env = parseFullEnv();
-  const client = new GeminiClient({ apiKey: env.GEMINI_API_KEY, chatModel: env.GEMINI_CHAT_MODEL, embeddingModel: env.GEMINI_EMBEDDING_MODEL });
+  const embeddingClient = new GeminiClient({
+    apiKey: env.GEMINI_API_KEY,
+    chatModel: env.GEMINI_CHAT_MODEL,
+    embeddingModel: env.GEMINI_EMBEDDING_MODEL,
+  });
+  const textClient = new GroqClient({
+    apiKey: env.GROQ_API_KEY,
+    baseUrl: env.GROQ_BASE_URL,
+    model: env.GROQ_MODEL,
+    fallbackModels: [env.GROQ_FALLBACK_MODEL, env.GROQ_TERTIARY_MODEL],
+  });
   const supabase = createSupabaseServerClient(env);
   const repository = new SupabaseKnowledgeRepository(supabase);
   const store = new SupabaseWebhookStore(supabase);
   const authVerifier = new SupabaseAuthVerifier(createSupabaseAuthClient(env));
   const provider = new FonnteProvider({ token: env.FONNTE_TOKEN });
-  const retriever = new SupabaseRetriever(repository, new GeminiEmbeddingService(client, env.GEMINI_EMBEDDING_DIMENSION));
-  const localRouter = new ConversationRouter({ retriever, gateway: client, sessionStore: store });
+  const retriever = new SupabaseRetriever(
+    repository,
+    new GeminiEmbeddingService(embeddingClient, env.GEMINI_EMBEDDING_DIMENSION),
+  );
+  const localRouter = new ConversationRouter({
+    retriever,
+    gateway: textClient,
+    sessionStore: store,
+  });
   const router = new HybridConversationRouter({
     localRouter,
     enabled: env.OPENCLAW_ENABLED,
@@ -44,7 +62,14 @@ export function createLabServer() {
         }
       : {}),
   });
-  const webhook = createWebhookHandler({ provider, store, router, webhookSecret: env.FONNTE_WEBHOOK_SECRET, logError: (message) => console.error(message) });
+  const webhook = createWebhookHandler({
+    provider,
+    store,
+    router,
+    webhookSecret: env.FONNTE_WEBHOOK_SECRET,
+    logInfo: (message) => console.info(message),
+    logError: (message) => console.error(message),
+  });
 
   return createServer(async (request, response) => {
     if (request.url === "/health" && request.method === "GET") {

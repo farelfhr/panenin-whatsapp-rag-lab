@@ -11,6 +11,7 @@ export interface WebhookHandlerDependencies {
   router: ConversationRouterLike;
   webhookSecret?: string;
   schedule?: (task: () => Promise<void>) => void;
+  logInfo?: (message: string) => void;
   logError?: (message: string) => void;
 }
 
@@ -33,18 +34,40 @@ export function createWebhookHandler(dependencies: WebhookHandlerDependencies) {
     const accepted: NormalizedIncomingMessage[] = [];
     for (const message of messages) {
       if (!message.providerMessageId || !message.sender) continue;
-      const claimed = await dependencies.store.claimIncoming(message, sanitizePayload(message.raw));
+      let claimed: boolean;
+      try {
+        claimed = await dependencies.store.claimIncoming(message, sanitizePayload(message.raw));
+      } catch {
+        dependencies.logError?.("Webhook Fonnte gagal disimpan; provider diminta mencoba ulang");
+        return new Response("temporarily unavailable", { status: 503 });
+      }
       if (claimed) accepted.push(message);
+    }
+    if (accepted.length > 0) {
+      dependencies.logInfo?.(`Webhook Fonnte menerima ${accepted.length} pesan baru`);
     }
 
     schedule(async () => {
       for (const message of accepted) {
-        if (message.type !== "text" || !message.text) continue;
+        if (message.type !== "text" || !message.text) {
+          await markStatus(dependencies, message.providerMessageId, "processed");
+          continue;
+        }
+        let reply: string;
         try {
-          const reply = await dependencies.router.route({ sender: message.sender, text: message.text });
-          await dependencies.provider.sendText({ to: message.sender, text: reply });
+          reply = await dependencies.router.route({ sender: message.sender, text: message.text });
         } catch {
-          dependencies.logError?.("Pemrosesan webhook gagal");
+          dependencies.logError?.("Pembuatan balasan AI gagal; pesan WhatsApp tidak dikirim");
+          await markStatus(dependencies, message.providerMessageId, "failed");
+          continue;
+        }
+        try {
+          await dependencies.provider.sendText({ to: message.sender, text: reply });
+          await markStatus(dependencies, message.providerMessageId, "processed");
+          dependencies.logInfo?.("Balasan WhatsApp berhasil dikirim melalui Fonnte");
+        } catch (error) {
+          await markStatus(dependencies, message.providerMessageId, "failed");
+          dependencies.logError?.(safeSendFailure(error));
         }
       }
     });
@@ -53,6 +76,33 @@ export function createWebhookHandler(dependencies: WebhookHandlerDependencies) {
       headers: { "content-type": "application/json" },
     });
   };
+}
+
+async function markStatus(
+  dependencies: WebhookHandlerDependencies,
+  providerMessageId: string,
+  status: "processed" | "failed",
+): Promise<void> {
+  try {
+    await dependencies.store.markIncomingStatus(providerMessageId, status);
+  } catch {
+    dependencies.logError?.("Status pemrosesan webhook gagal diperbarui");
+  }
+}
+
+function safeSendFailure(error: unknown): string {
+  if (!(error instanceof Error)) return "Pengiriman balasan melalui Fonnte gagal";
+  const safeMessages = [
+    "Fonnte menolak token device",
+    "Device Fonnte tidak terhubung",
+    "Fonnte menolak nomor tujuan",
+    "Kuota Fonnte tidak mencukupi",
+    "Fonnte menolak pengiriman pesan",
+    "Fonnte request timeout",
+  ];
+  if (safeMessages.includes(error.message)) return error.message;
+  if (/^Fonnte HTTP error \d{3}$/.test(error.message)) return error.message;
+  return "Pengiriman balasan melalui Fonnte gagal";
 }
 
 async function parseRequestPayload(request: Request): Promise<unknown> {

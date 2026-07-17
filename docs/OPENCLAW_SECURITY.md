@@ -6,7 +6,7 @@
 - Gateway menggunakan bearer token; internal tool menggunakan secret terpisah.
 - Nomor WhatsApp dipseudonimkan dengan HMAC dan tidak diteruskan ke OpenClaw.
 - Tool agent hanya read-only dan hanya mengembalikan jawaban serta metadata sumber.
-- OpenClaw tidak mendapat service-role key, Gemini key, Fonnte token, webhook payload mentah, SQL, shell, filesystem, browser, atau messaging tool.
+- OpenClaw hanya menerima Groq API key sebagai credential model dan gateway token lokal. OpenClaw tidak mendapat service-role key, Gemini key, Fonnte token, webhook payload mentah, SQL, shell, filesystem, browser, atau messaging tool.
 - Tidak ada output model yang dieksekusi sebagai tindakan.
 
 ## Ancaman dan mitigasi

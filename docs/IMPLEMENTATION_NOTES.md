@@ -2,7 +2,7 @@
 
 ## Tujuan lab
 
-`panenin-whatsapp-rag-lab` adalah integration lab terpisah untuk membuktikan alur pesan WhatsApp berbasis teks melalui Fonnte, routing percakapan yang deterministik, pencarian knowledge dengan Supabase PostgreSQL dan pgvector, serta pembuatan jawaban terbatas konteks dengan Gemini. Lab menyiapkan kontrak dan artefak yang kelak dapat dipindahkan secara selektif ke repository utama tanpa mengasumsikan struktur repository tersebut.
+`panenin-whatsapp-rag-lab` adalah integration lab terpisah untuk membuktikan alur pesan WhatsApp berbasis teks melalui Fonnte, routing percakapan yang deterministik, pencarian knowledge dengan Supabase PostgreSQL dan pgvector, serta pembuatan jawaban terbatas konteks dengan Groq. Gemini dipertahankan khusus embedding 768-dim agar knowledge yang sudah tersimpan tetap kompatibel. Lab menyiapkan kontrak dan artefak yang kelak dapat dipindahkan secara selektif ke repository utama tanpa mengasumsikan struktur repository tersebut.
 
 Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima order, mengubah stok, memproses pembayaran atau escrow, melakukan withdrawal, maupun memberi AI akses untuk menulis transaksi.
 
@@ -10,8 +10,8 @@ Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima ord
 
 | Milestone | Bukti keberhasilan | Kondisi berhenti atau batas |
 | --- | --- | --- |
-| M0 - Account ready | Gemini API key tersedia, project Supabase dibuat, dan device Fonnte terhubung | Aktivitas dashboard dan credential dikerjakan manusia; pekerjaan lokal yang tidak memerlukan secret tetap dapat dilanjutkan |
-| M1 - Gemini test | Prompt sederhana menghasilkan `GEMINI_OK`; structured intent tervalidasi | Model/key/quota harus diverifikasi manual bila panggilan langsung gagal |
+| M0 - Account ready | Groq API key, Gemini embedding key, project Supabase, dan device Fonnte tersedia | Aktivitas dashboard dan credential dikerjakan manusia; pekerjaan lokal yang tidak memerlukan secret tetap dapat dilanjutkan |
+| M1 - Provider test | Prompt Groq menghasilkan `GROQ_OK`; embedding Gemini menghasilkan vector 768 | Model/key/quota harus diverifikasi manual bila panggilan langsung gagal |
 | M2 - RAG standalone | Pertanyaan relevan menghasilkan jawaban beserta source; no-answer juga benar | Dimensi embedding harus tetap 768 dan knowledge harus di-ingest ulang bila model/dimensi berubah |
 | M3 - Fonnte echo | Pesan teks outbound dan payload inbound dapat diuji terpisah | Jangan menghubungkan AI sebelum payload aktual yang disanitasi diverifikasi |
 | M4 - WhatsApp + RAG | Pesan `TANYA: ...` dirutekan satu kali ke RAG dengan fallback aman | Tidak ada mutation dan event duplicate/outgoing harus diblokir |
@@ -24,7 +24,7 @@ Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima ord
 - Service-role key hanya dipakai oleh proses server/CLI untuk ingestion dan webhook lab; tidak boleh dikirim ke browser atau pengguna.
 - Input webhook diperlakukan sebagai data tidak tepercaya, dinormalisasi secara defensif, disanitasi sebelum disimpan, dan dideduplicate berdasarkan provider message ID.
 - Event outgoing/bot sendiri tidak boleh diproses ulang.
-- Gemini hanya dipakai untuk embedding, jawaban RAG berbasis konteks, dan klasifikasi intent terstruktur. Output model tidak mengeksekusi action dan tidak menulis database transaksi.
+- Groq hanya dipakai untuk percakapan, jawaban RAG berbasis konteks, dan klasifikasi intent terstruktur. Gemini hanya dipakai untuk embedding. Output model tidak mengeksekusi action dan tidak menulis database transaksi.
 - Jawaban RAG harus menggunakan konteks retrieved saja, berbahasa Indonesia sederhana, tidak mengarang, dan tidak membuat klaim keamanan pangan.
 - Prompt injection diperlakukan sebagai input pengguna biasa dan tidak boleh menyebabkan secret, instruction internal, atau raw payload terungkap.
 - Panggilan provider eksternal memakai timeout dan retry terbatas hanya untuk operasi aman/idempotent. Pengiriman pesan tidak di-retry secara otomatis karena dapat menghasilkan pesan ganda.
@@ -32,7 +32,8 @@ Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima ord
 
 ## Pekerjaan manusia yang wajib dilakukan manual
 
-- Membuat API key di Google AI Studio, memilih model Flash/Lite dan model embedding yang benar-benar tersedia, lalu menyimpan key di password manager.
+- Membuat API key baru di Groq Console, memilih model chat yang aktif, dan menyimpannya di password manager tanpa membagikannya di chat.
+- Membuat API key di Google AI Studio dan memilih model embedding yang mendukung 768 dimensi; key ini tidak diberikan ke OpenClaw.
 - Membuat project Supabase, memilih region, membuat password kuat, mengaktifkan extension `vector`, menjalankan migration, dan mengambil Project URL, anon key, serta service-role key.
 - Membuat akun Fonnte, menambahkan device dengan nomor khusus demo, memindai QR, memverifikasi status connected, mengambil token, dan mengatur webhook URL publik.
 - Membuat tunnel publik atau deployment endpoint, memastikan laptop/server tetap aktif, lalu menguji webhook dari dashboard/provider aktual.
@@ -43,7 +44,7 @@ Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima ord
 ## Asumsi teknis
 
 - Runtime adalah Node.js 20 atau lebih baru dengan native `fetch`, `FormData`, `Request`, dan `Response`.
-- Implementasi memakai TypeScript strict, `@google/genai`, `@supabase/supabase-js`, Zod, dotenv, dan Vitest tanpa LangChain atau framework agent.
+- Implementasi memakai TypeScript strict, Groq OpenAI-compatible Chat Completions melalui native `fetch`, `@google/genai` khusus embedding, `@supabase/supabase-js`, Zod, dotenv, dan Vitest tanpa LangChain atau framework agent tambahan.
 - Embedding selalu memiliki 768 elemen. Nama model chat dan embedding berasal dari environment.
 - Supabase menjadi satu-satunya database runtime; test menggunakan dependency injection/mocks, bukan database lokal pengganti.
 - Webhook lab berjalan pada server HTTP Node sederhana dan mengembalikan acknowledgement cepat setelah normalisasi serta klaim dedup. Pemrosesan diteruskan secara asynchronous di dalam proses lab; deployment production kelak membutuhkan queue/durable worker.
@@ -79,4 +80,3 @@ Lab ini bukan backend transaksi Panenin. Lab tidak membuat listing, menerima ord
 - Panduan memberi contoh fallback provider message ID berbasis waktu. Implementasi menolak message tanpa ID stabil untuk mempertahankan idempotensi.
 - Panduan menyebut M0 sebagai stop sebelum coding, sedangkan brief eksplisit meminta melanjutkan bagian yang tidak membutuhkan secret. Karena folder ini harus dapat dibangun dan diuji offline, scaffolding, source, migration, fixture palsu, dokumentasi, dan unit test tetap dibuat; uji integrasi aktual ditandai manual.
 - Nama model contoh dalam PDF tidak di-hardcode sebagai fallback. Ketersediaan model berubah dan brief mewajibkan model dibaca dari environment.
-

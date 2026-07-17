@@ -1,4 +1,4 @@
-import type { GeminiGateway } from "../ai/gemini-client.js";
+import type { TextGenerationGateway } from "../ai/gateway.js";
 import { NO_ANSWER, type RagAnswer } from "../types/rag.js";
 import type { Retriever } from "./retrieve.js";
 
@@ -13,7 +13,7 @@ const RAG_SYSTEM_INSTRUCTION = [
 
 export async function answerKnowledge(
   question: string,
-  dependencies: { retriever: Retriever; gateway: GeminiGateway },
+  dependencies: { retriever: Retriever; gateway: TextGenerationGateway },
 ): Promise<RagAnswer> {
   const matches = await dependencies.retriever.retrieve(question);
   if (matches.length === 0) return { answer: NO_ANSWER, sources: [] };
@@ -21,13 +21,31 @@ export async function answerKnowledge(
   const context = matches
     .map((match, index) => `Sumber ${index + 1}: ${match.title}\n${match.content}`)
     .join("\n\n");
-  const answer = await dependencies.gateway.generateText({
-    systemInstruction: RAG_SYSTEM_INSTRUCTION,
-    prompt: `Konteks knowledge:\n${context}\n\nPertanyaan pengguna:\n${question.trim()}`,
-  });
+  let answer: string;
+  try {
+    answer = await dependencies.gateway.generateText({
+      systemInstruction: RAG_SYSTEM_INSTRUCTION,
+      prompt: `Konteks knowledge:\n${context}\n\nPertanyaan pengguna:\n${question.trim()}`,
+    });
+  } catch {
+    answer = createGroundedFallback(matches[0]);
+  }
   const safeAnswer = answer.trim() || NO_ANSWER;
   return {
     answer: safeAnswer,
     sources: matches.map((match) => ({ title: match.title, similarity: match.similarity })),
   };
+}
+
+function createGroundedFallback(
+  match: Awaited<ReturnType<Retriever["retrieve"]>>[number] | undefined,
+): string {
+  if (!match) return NO_ANSWER;
+  const normalized = match.content.replace(/\s+/g, " ").trim();
+  if (!normalized) return NO_ANSWER;
+  const maximumLength = 420;
+  const excerpt = normalized.length <= maximumLength
+    ? normalized
+    : `${normalized.slice(0, maximumLength - 3).trimEnd()}...`;
+  return `Berdasarkan panduan "${match.title}": ${excerpt}`;
 }

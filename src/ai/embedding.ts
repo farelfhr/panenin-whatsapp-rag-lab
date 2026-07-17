@@ -1,4 +1,4 @@
-import type { GeminiGateway } from "./gemini-client.js";
+import type { EmbeddingGateway } from "./gateway.js";
 
 export interface EmbeddingService {
   embed(text: string): Promise<number[]>;
@@ -6,7 +6,7 @@ export interface EmbeddingService {
 
 export class GeminiEmbeddingService implements EmbeddingService {
   public constructor(
-    private readonly gateway: GeminiGateway,
+    private readonly gateway: EmbeddingGateway,
     private readonly dimension: number,
   ) {}
 

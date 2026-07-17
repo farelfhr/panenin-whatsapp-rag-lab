@@ -49,50 +49,68 @@ INTERNAL_TOOL_PORT=3001
 PANENIN_TOOL_SECRET=<secret-3>
 PANENIN_RAG_TOOL_URL=http://127.0.0.1:3001/internal/tools/rag-query
 
-# API key Olagon asli dari dashboard/provider (bukan hasil New-LocalSecret)
-OLAGON_API_KEY=<api-key-olagon>
-ANTHROPIC_API_KEY=<salin-api-key-olagon-untuk-environment-OpenClaw>
-OLAGON_API_URL=https://gateway.olagon.site/anthropic/v1/messages
-OLAGON_BASE_URL=https://gateway.olagon.site/anthropic
-# ID model persis yang disediakan Olagon
-OLAGON_MODEL_ID=<id-model-yang-diberikan-olagon>
+# Key baru dari Groq Console yang belum pernah dibagikan di chat/log
+GROQ_API_KEY=<api-key-groq-baru>
+GROQ_BASE_URL=https://api.groq.com/openai/v1
+GROQ_MODEL=openai/gpt-oss-120b
+GROQ_FALLBACK_MODEL=openai/gpt-oss-20b
+GROQ_TERTIARY_MODEL=qwen/qwen3.6-27b
 ```
 
 Biarkan `OPENCLAW_ENABLED=false` sampai semua smoke test selesai.
 
-## 4. Uji Olagon langsung
+## 4. Uji Groq langsung
 
 Perintah ini melakukan satu request jaringan dan hanya mencetak status sukses atau error aman:
 
 ```powershell
-npm run test:olagon
+npm run test:groq
 ```
 
-Lanjutkan hanya jika hasilnya `OLAGON_OK`.
+Lanjutkan hanya jika hasilnya `GROQ_OK`.
 
 ## 5. Build dan validasi plugin
 
 ```powershell
-$env:PATH = "C:\Users\user\AppData\Local\Programs\node-v24.18.0;$env:PATH"
 npm --prefix .\openclaw\plugins\panenin-tools install
 npm run plugin:test
 npm run plugin:validate
 openclaw plugins install --link .\openclaw\plugins\panenin-tools
 ```
 
+Build dan validasi plugin otomatis memilih Node yang memenuhi requirement OpenClaw. Jika auto-detect
+tidak menemukan runtime yang benar, set hanya untuk terminal aktif:
+
+```powershell
+$env:OPENCLAW_NODE_BINARY = "C:\path\ke\node-v24.18.0\node.exe"
+```
+
+Jangan arahkan variable tersebut ke Node `24.14.x`; OpenClaw 2026.7.1 mensyaratkan minimal
+Node `24.15.0` pada jalur Node 24.
+
 Plugin menyediakan tepat satu tool read-only: `panenin_rag_query`.
 
 ## 6. Siapkan konfigurasi OpenClaw
 
-1. Buka `openclaw/config/openclaw.example.json5`.
-2. Model yang sudah dicantumkan adalah `anthropic/claude-3-5-sonnet`, sesuai model dari portal Olagon; ubah hanya jika provider memberikan ID berbeda.
-3. Pastikan path workspace sesuai lokasi repo.
-4. Gabungkan konfigurasi secara manual ke konfigurasi OpenClaw Anda. Jangan menghapus konfigurasi lain tanpa review.
-5. Pastikan environment pada terminal gateway memuat `OLAGON_API_KEY`, `OLAGON_BASE_URL`, `OPENCLAW_GATEWAY_TOKEN`, `PANENIN_RAG_TOOL_URL`, dan `PANENIN_TOOL_SECRET`.
+1. Review `openclaw/config/openclaw.example.json5`.
+2. Model utama dibentuk sebagai `groq/<GROQ_MODEL>` oleh launcher; ubah `GROQ_MODEL` hanya ke model aktif yang ditampilkan Groq Console.
+3. Jangan gabungkan file ini ke konfigurasi OpenClaw global untuk demo lab.
+4. Launcher menyalin config ke `tmp/openclaw-runtime`, mengisi path workspace/plugin lewat environment, dan memakai state terisolasi yang diabaikan Git.
+5. Pastikan `.env` memuat `GROQ_API_KEY`, `GROQ_MODEL`, `OPENCLAW_GATEWAY_TOKEN`, `PANENIN_RAG_TOOL_URL`, dan `PANENIN_TOOL_SECRET`.
 
-Konfigurasi membatasi gateway ke loopback, mengaktifkan `/v1/chat/completions`, memilih provider `anthropic` melalui base URL Olagon, dan mengizinkan hanya `panenin_rag_query`. OpenClaw membaca `ANTHROPIC_API_KEY` dari environment globalnya (`~/.openclaw/.env` atau shell gateway).
+Konfigurasi membatasi gateway ke loopback, mengaktifkan `/v1/chat/completions`, memilih provider `groq` melalui endpoint OpenAI-compatible resmi, dan mengizinkan hanya `panenin_rag_query`. Launcher meneruskan `GROQ_API_KEY` hanya ke child process OpenClaw; plugin tidak menerima key tersebut.
 
-## 7. Jalankan tiga proses
+## 7. Jalankan demo
+
+Cara tercepat adalah satu launcher:
+
+```powershell
+npm run demo
+```
+
+Launcher memulai atau memakai ulang tiga service di bawah, menunggu readiness, lalu mengecek Fonnte dan endpoint publik tanpa mengirim pesan. Jalankan `npm run demo:check` dari terminal lain untuk mengulang pemeriksaan. `DEMO_LOCAL_READY` dan `DEMO_WHATSAPP_READY` harus muncul sebelum demo WhatsApp.
+
+Jika perlu diagnosis per proses, jalankan manual:
 
 Terminal A — internal RAG tool:
 
@@ -109,7 +127,7 @@ $env:PATH = "C:\Users\user\AppData\Local\Programs\node-v24.18.0;$env:PATH"
 npm run openclaw:gateway
 ```
 
-Launcher repo memuat `.env`, meneruskan `ANTHROPIC_API_KEY`, `OPENCLAW_GATEWAY_TOKEN`, dan `PANENIN_TOOL_SECRET` ke gateway, lalu menjalankan `openclaw gateway run` dengan Node portable.
+Launcher repo memuat `.env`, meneruskan `GROQ_API_KEY`, `OPENCLAW_GATEWAY_TOKEN`, dan `PANENIN_TOOL_SECRET` ke gateway, lalu menjalankan `openclaw gateway run` dengan Node portable.
 
 Terminal C — webhook WhatsApp:
 
@@ -139,8 +157,9 @@ https://<tunnel-anda>/webhook/fonnte?token=<FONNTE_WEBHOOK_SECRET>
 Uji dari WhatsApp:
 
 1. Kirim `MENU` — harus mendapat menu lokal.
-2. Kirim `TANYA: bagaimana persiapan panen?` — harus mendapat jawaban agent/RAG.
-3. Matikan gateway lalu ulangi `TANYA:` — harus fallback ke RAG lokal.
-4. Kirim kalimat natural — saat gateway hidup, dijawab OpenClaw; saat mati, mendapat petunjuk menu.
+2. Kirim `Halo, saya punya cabai yang siap panen minggu depan` — Nara harus menanggapi natural tanpa meminta format command.
+3. Kirim `jumlahnya sekitar 200 kilo` — Nara harus memahami bahwa ini lanjutan konteks cabai.
+4. Kirim `Bagaimana persiapan panennya?` — harus mendapat jawaban agent/knowledge tanpa awalan `TANYA:`.
+5. Matikan gateway lalu ulangi `TANYA:` — harus fallback ke RAG lokal.
 
 Jangan isi `Webhook Connect`, `Webhook Message Status`, atau `Webhook Chaining` untuk alur pesan masuk ini.

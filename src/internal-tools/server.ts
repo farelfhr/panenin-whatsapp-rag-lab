@@ -4,7 +4,13 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 import { GeminiClient } from "../ai/gemini-client.js";
 import { GeminiEmbeddingService } from "../ai/embedding.js";
-import { parseGeminiEnv, parseInternalToolEnv, parseSupabaseEnv } from "../config/env.js";
+import { GroqClient } from "../ai/groq-client.js";
+import {
+  parseGeminiEnv,
+  parseGroqEnv,
+  parseInternalToolEnv,
+  parseSupabaseEnv,
+} from "../config/env.js";
 import { createSupabaseServerClient, SupabaseKnowledgeRepository } from "../database/supabase.js";
 import { answerKnowledge } from "../rag/answer.js";
 import { SupabaseRetriever } from "../rag/retrieve.js";
@@ -13,11 +19,30 @@ import { createRagQueryHandler } from "./rag-query-handler.js";
 export function createInternalToolServer() {
   const toolEnv = parseInternalToolEnv();
   const geminiEnv = parseGeminiEnv();
+  const groqEnv = parseGroqEnv();
   const supabaseEnv = parseSupabaseEnv();
-  const client = new GeminiClient({ apiKey: geminiEnv.GEMINI_API_KEY, chatModel: geminiEnv.GEMINI_CHAT_MODEL, embeddingModel: geminiEnv.GEMINI_EMBEDDING_MODEL });
+  const embeddingClient = new GeminiClient({
+    apiKey: geminiEnv.GEMINI_API_KEY,
+    chatModel: geminiEnv.GEMINI_CHAT_MODEL,
+    embeddingModel: geminiEnv.GEMINI_EMBEDDING_MODEL,
+  });
+  const textClient = new GroqClient({
+    apiKey: groqEnv.GROQ_API_KEY,
+    baseUrl: groqEnv.GROQ_BASE_URL,
+    model: groqEnv.GROQ_MODEL,
+    fallbackModels: [groqEnv.GROQ_FALLBACK_MODEL, groqEnv.GROQ_TERTIARY_MODEL],
+  });
   const repository = new SupabaseKnowledgeRepository(createSupabaseServerClient(supabaseEnv));
-  const retriever = new SupabaseRetriever(repository, new GeminiEmbeddingService(client, geminiEnv.GEMINI_EMBEDDING_DIMENSION));
-  const ragHandler = createRagQueryHandler({ toolSecret: toolEnv.PANENIN_TOOL_SECRET, retriever, gateway: client, answerFn: answerKnowledge });
+  const retriever = new SupabaseRetriever(
+    repository,
+    new GeminiEmbeddingService(embeddingClient, geminiEnv.GEMINI_EMBEDDING_DIMENSION),
+  );
+  const ragHandler = createRagQueryHandler({
+    toolSecret: toolEnv.PANENIN_TOOL_SECRET,
+    retriever,
+    gateway: textClient,
+    answerFn: answerKnowledge,
+  });
 
   return createServer(async (request, response) => {
     if (request.url?.split("?")[0] !== "/internal/tools/rag-query") {

@@ -1,39 +1,125 @@
 {
-  // Salin manual ke konfigurasi OpenClaw Anda. Jangan simpan nilai secret di file ini.
+  // Launcher menyalin file ini ke tmp/openclaw-runtime. Jangan simpan nilai secret di file ini.
   agents: {
     defaults: {
-      workspace: "D:/Dev/panenin-whatsapp-rag-lab/openclaw/workspace",
+      workspace: "${PANENIN_OPENCLAW_WORKSPACE}",
+      // WhatsApp membutuhkan prompt kecil agar muat pada limit TPM Groq free tier.
+      skills: [
+        "conversation-companion",
+        "harvest-intake",
+        "knowledge-rag",
+        "sales-planner",
+      ],
+      contextInjection: "continuation-skip",
+      bootstrapMaxChars: 2000,
+      bootstrapTotalMaxChars: 3200,
+      bootstrapPromptTruncationWarning: "once",
+      experimental: {
+        localModelLean: true,
+      },
       model: {
-        primary: "anthropic/claude-3-5-sonnet",
+        primary: "${OPENCLAW_PRIMARY_MODEL}",
+        fallbacks: [
+          "${OPENCLAW_FALLBACK_MODEL}",
+          "${OPENCLAW_TERTIARY_MODEL}",
+        ],
+      },
+      models: {
+        "groq/openai/gpt-oss-120b": {
+          params: {
+            extra_body: {
+              reasoning_effort: "low",
+              reasoning_format: "hidden",
+            },
+          },
+        },
+        "groq-fast/openai/gpt-oss-20b": {
+          params: {
+            extra_body: {
+              reasoning_effort: "low",
+              reasoning_format: "hidden",
+            },
+          },
+        },
+        "groq-backup/qwen/qwen3.6-27b": {
+          params: {
+            extra_body: {
+              reasoning_effort: "none",
+              reasoning_format: "hidden",
+            },
+          },
+        },
       },
     },
   },
   models: {
     mode: "merge",
     providers: {
-      anthropic: {
-        baseUrl: "https://gateway.olagon.site/anthropic",
-        apiKey: "${ANTHROPIC_API_KEY}",
-        api: "anthropic-messages",
+      groq: {
+        baseUrl: "${GROQ_BASE_URL}",
+        apiKey: "${GROQ_API_KEY}",
+        api: "openai-completions",
         timeoutSeconds: 120,
         models: [
           {
-            id: "claude-3-5-sonnet",
-            name: "Claude 3.5 Sonnet via Olagon",
+            id: "${GROQ_MODEL}",
+            name: "Groq primary model",
             reasoning: false,
             input: ["text"],
-            contextWindow: 200000,
+            contextWindow: 131072,
+            maxTokens: 8192,
+          },
+        ],
+      },
+      "groq-fast": {
+        baseUrl: "${GROQ_BASE_URL}",
+        apiKey: "${GROQ_API_KEY}",
+        api: "openai-completions",
+        timeoutSeconds: 120,
+        models: [
+          {
+            id: "${GROQ_FALLBACK_MODEL}",
+            name: "Groq isolated fast fallback model",
+            reasoning: false,
+            input: ["text"],
+            contextWindow: 131072,
+            maxTokens: 8192,
+          },
+        ],
+      },
+      "groq-backup": {
+        baseUrl: "${GROQ_BASE_URL}",
+        apiKey: "${GROQ_API_KEY}",
+        api: "openai-completions",
+        timeoutSeconds: 120,
+        models: [
+          {
+            id: "${GROQ_TERTIARY_MODEL}",
+            name: "Groq tertiary reasoning fallback model",
+            reasoning: false,
+            input: ["text"],
+            contextWindow: 131072,
             maxTokens: 8192,
           },
         ],
       },
     },
   },
+  auth: {
+    cooldowns: {
+      rateLimitedProfileRotations: 0,
+      overloadedProfileRotations: 0,
+      overloadedBackoffMs: 0,
+    },
+  },
   gateway: {
     mode: "local",
     bind: "loopback",
     port: 18789,
-    auth: { mode: "token" },
+    auth: {
+      mode: "token",
+      token: "${OPENCLAW_GATEWAY_TOKEN}",
+    },
     http: {
       endpoints: {
         chatCompletions: { enabled: true },
@@ -42,6 +128,9 @@
   },
   plugins: {
     allow: ["panenin-tools"],
+    load: {
+      paths: ["${PANENIN_OPENCLAW_PLUGIN_PATH}"],
+    },
     entries: {
       "panenin-tools": {
         enabled: true,
@@ -53,5 +142,12 @@
   },
   tools: {
     allow: ["panenin_rag_query"],
+    // Lean mode tidak perlu menambahkan katalog tool-search: hanya ada satu tool.
+    toolSearch: false,
+  },
+  skills: {
+    limits: {
+      maxSkillsPromptChars: 1800,
+    },
   },
 }

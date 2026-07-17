@@ -1,4 +1,4 @@
-import type { GeminiGateway } from "../ai/gemini-client.js";
+import type { TextGenerationGateway } from "../ai/gateway.js";
 import type { Retriever } from "../rag/retrieve.js";
 import { answerKnowledge } from "../rag/answer.js";
 import type { RagAnswer } from "../types/rag.js";
@@ -11,8 +11,8 @@ const querySchema = {
 export interface RagQueryHandlerDependencies {
   toolSecret: string;
   retriever: Retriever;
-  gateway: GeminiGateway;
-  answerFn?: (question: string, dependencies: { retriever: Retriever; gateway: GeminiGateway }) => Promise<RagAnswer>;
+  gateway: TextGenerationGateway;
+  answerFn?: (question: string, dependencies: { retriever: Retriever; gateway: TextGenerationGateway }) => Promise<RagAnswer>;
 }
 
 export function createRagQueryHandler(dependencies: RagQueryHandlerDependencies) {

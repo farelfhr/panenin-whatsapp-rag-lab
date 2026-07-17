@@ -1,5 +1,7 @@
 # OpenClaw Integration Implementation Plan
 
+> Catatan 17 Juli 2026: dokumen ini merekam rencana awal berbasis Olagon. Provider runtime aktif sudah dimigrasikan ke Groq; gunakan `IMPLEMENTATION_STATUS.md` dan `OPENCLAW_MANUAL_SETUP.md` sebagai acuan terkini.
+
 ## Status audit
 
 Tanggal audit: 2026-07-17

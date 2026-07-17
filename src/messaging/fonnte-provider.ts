@@ -10,6 +10,7 @@ const fonnteResponseSchema = z.object({
     z.array(z.union([z.string(), z.number()])),
   ]).optional(),
   detail: z.string().optional(),
+  reason: z.string().optional(),
 }).passthrough();
 
 export interface FonnteProviderOptions {
@@ -49,6 +50,9 @@ export class FonnteProvider implements MessagingProvider {
       }
       const body = fonnteResponseSchema.safeParse(rawBody);
       if (!body.success) throw new Error("Fonnte response tidak valid");
+      if (isRejectedStatus(body.data.status)) {
+        throw new Error(describeFonnteRejection(body.data.reason ?? body.data.detail));
+      }
       const rawProviderMessageId = body.data.id;
       const providerMessageIdValue = Array.isArray(rawProviderMessageId)
         ? rawProviderMessageId[0]
@@ -70,4 +74,21 @@ export class FonnteProvider implements MessagingProvider {
   public parseWebhook(payload: unknown): NormalizedIncomingMessage[] {
     return normalizeFonntePayload(payload);
   }
+}
+
+function isRejectedStatus(status: boolean | string | undefined): boolean {
+  return status === false || (typeof status === "string" && status.toLowerCase() === "false");
+}
+
+function describeFonnteRejection(reason: string | undefined): string {
+  const normalized = reason?.trim().toLowerCase() ?? "";
+  if (normalized.includes("token") || normalized.includes("device not found") || normalized.includes("unknown user")) {
+    return "Fonnte menolak token device";
+  }
+  if (normalized.includes("disconnect")) return "Device Fonnte tidak terhubung";
+  if (normalized.includes("target")) return "Fonnte menolak nomor tujuan";
+  if (normalized.includes("quota") || normalized.includes("balance")) {
+    return "Kuota Fonnte tidak mencukupi";
+  }
+  return "Fonnte menolak pengiriman pesan";
 }

@@ -6,6 +6,8 @@
 | Client | Request Chat Completions | Ya | bearer, model, pseudonymous `user` |
 | Client | HTTP/format error | Ya | gagal aman tanpa body/token |
 | Client | Timeout | Ya | abort satu kali, tanpa retry |
+| Client | Rate limit | Ya | satu cooldown retry read-only; body/session tetap sama |
+| Client | Respons lanjutan | Ya | kontrak ringkas, maksimum token, dan session stabil |
 | Hybrid router | Feature flag off | Ya | perilaku router lama |
 | Hybrid router | MENU/BATAL | Ya | selalu lokal |
 | Hybrid router | TANYA gateway down | Ya | fallback RAG lokal |
@@ -16,8 +18,9 @@
 | Internal tool | Output minimisasi | Ya | answer + maks. 4 sources |
 | Plugin | URL arbitrer | Ya | ditolak; loopback/path fixed saja |
 | Plugin | Output minimisasi | Ya | chunks mentah dibuang |
-| Olagon | Anthropic-compatible endpoint | Manual/network | `OLAGON_OK` |
+| Groq | OpenAI-compatible Chat Completions | Manual/network | `GROQ_OK` |
 | OpenClaw | Gateway + model | Manual/network | `OPENCLAW_OK` |
+| OpenClaw | Percakapan natural 3 putaran | Manual/network | `OPENCLAW_NATURAL_OK` |
 | OpenClaw/RAG | Agent memanggil plugin | Manual/network | `OPENCLAW_RAG_OK` |
 | WhatsApp | End-to-end via Fonnte | Manual | pesan mendapat respons |
 

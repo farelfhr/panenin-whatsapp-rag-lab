@@ -1,6 +1,6 @@
 import type { RagAnswer } from "../types/rag.js";
 import { answerKnowledge } from "../rag/answer.js";
-import type { GeminiGateway } from "../ai/gemini-client.js";
+import type { TextGenerationGateway } from "../ai/gateway.js";
 import type { Retriever } from "../rag/retrieve.js";
 import { CANCEL_TEXT, EMPTY_QUESTION_TEXT, MENU_TEXT } from "./menu.js";
 import { deterministicFallback } from "./fallback.js";
@@ -11,9 +11,9 @@ export interface ConversationSessionStore {
 
 export interface ConversationRouterDependencies {
   retriever: Retriever;
-  gateway: GeminiGateway;
+  gateway: TextGenerationGateway;
   sessionStore: ConversationSessionStore;
-  answerFn?: (question: string, dependencies: { retriever: Retriever; gateway: GeminiGateway }) => Promise<RagAnswer>;
+  answerFn?: (question: string, dependencies: { retriever: Retriever; gateway: TextGenerationGateway }) => Promise<RagAnswer>;
 }
 
 export class ConversationRouter {

@@ -1,13 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { GeminiGateway } from "../src/ai/gemini-client.js";
+import type { TextGenerationGateway } from "../src/ai/gateway.js";
 import type { Retriever } from "../src/rag/retrieve.js";
 import { createRagQueryHandler } from "../src/internal-tools/rag-query-handler.js";
 
 const toolSecret = "internal-tool-secret-123456";
 const retriever: Retriever = { retrieve: vi.fn().mockResolvedValue([]) };
-const gateway: GeminiGateway = {
+const gateway: TextGenerationGateway = {
   generateText: vi.fn().mockResolvedValue(""),
-  embedText: vi.fn().mockResolvedValue([]),
 };
 
 function request(body: unknown, secret = toolSecret): Request {

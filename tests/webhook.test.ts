@@ -13,6 +13,7 @@ function setup() {
       claimedIds.add(message.providerMessageId);
       return true;
     }),
+    markIncomingStatus: vi.fn(async () => undefined),
     resetSession: vi.fn(async () => undefined),
   };
   const router = { route: vi.fn(async () => "reply") } as unknown as ConversationRouter;
@@ -77,6 +78,10 @@ describe("webhook", () => {
     await setupResult.tasks[0]?.();
     expect(setupResult.router.route).toHaveBeenCalledOnce();
     expect(setupResult.provider).toBeDefined();
+    expect(setupResult.store.markIncomingStatus).toHaveBeenCalledWith(
+      "msg-demo-001",
+      "processed",
+    );
   });
 
   it("duplicate message tidak diproses dua kali", async () => {
@@ -99,5 +104,56 @@ describe("webhook", () => {
     }));
     expect(response.status).toBe(200);
     expect(setupResult.store.claimIncoming).not.toHaveBeenCalled();
+  });
+
+  it("mengembalikan 503 agar Fonnte retry ketika penyimpanan dedup gagal", async () => {
+    const setupResult = setup();
+    vi.mocked(setupResult.store.claimIncoming).mockRejectedValueOnce(new Error("database unavailable"));
+    const logError = vi.fn();
+    const handler = createWebhookHandler({
+      provider: setupResult.provider,
+      store: setupResult.store,
+      router: setupResult.router,
+      logError,
+    });
+
+    const response = await handler(new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "msg-store-fail", sender: "628", message: "halo" }),
+    }));
+
+    expect(response.status).toBe(503);
+    expect(logError).toHaveBeenCalledWith(expect.stringContaining("mencoba ulang"));
+    expect(logError).not.toHaveBeenCalledWith(expect.stringContaining("database unavailable"));
+  });
+
+  it("mencatat kegagalan pengiriman Fonnte tanpa token atau nomor", async () => {
+    const setupResult = setup();
+    vi.spyOn(setupResult.provider, "sendText").mockRejectedValueOnce(
+      new Error("Fonnte menolak token device"),
+    );
+    const logError = vi.fn();
+    const handler = createWebhookHandler({
+      provider: setupResult.provider,
+      store: setupResult.store,
+      router: setupResult.router,
+      schedule: (task) => setupResult.tasks.push(task),
+      logError,
+    });
+    await handler(new Request("http://localhost/webhook", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: "msg-send-fail", sender: "628", message: "halo" }),
+    }));
+
+    await setupResult.tasks[0]?.();
+
+    expect(logError).toHaveBeenCalledWith("Fonnte menolak token device");
+    expect(logError).not.toHaveBeenCalledWith(expect.stringContaining("628"));
+    expect(setupResult.store.markIncomingStatus).toHaveBeenCalledWith(
+      "msg-send-fail",
+      "failed",
+    );
   });
 });

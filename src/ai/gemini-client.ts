@@ -1,19 +1,9 @@
-import { GoogleGenAI, Type } from "@google/genai";
-
-export interface StructuredSchema {
-  type: Type;
-  properties: Record<string, unknown>;
-  required: string[];
-}
-
-export interface GeminiGateway {
-  generateText(input: {
-    prompt: string;
-    systemInstruction?: string;
-    responseSchema?: StructuredSchema;
-  }): Promise<string>;
-  embedText(input: { text: string; outputDimensionality: number }): Promise<number[]>;
-}
+import { GoogleGenAI } from "@google/genai";
+import type {
+  EmbeddingGateway,
+  StructuredSchema,
+  TextGenerationGateway,
+} from "./gateway.js";
 
 export interface GeminiClientOptions {
   apiKey: string;
@@ -24,7 +14,7 @@ export interface GeminiClientOptions {
   maxRetries?: number;
 }
 
-export class GeminiClient implements GeminiGateway {
+export class GeminiClient implements TextGenerationGateway, EmbeddingGateway {
   private readonly ai: GoogleGenAI;
   private readonly chatModel: string;
   private readonly embeddingModel: string;

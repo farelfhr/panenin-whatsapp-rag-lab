@@ -18,13 +18,23 @@ export const baseEnvSchema = z.object({
 
 export const geminiEnvSchema = baseEnvSchema.extend({
   GEMINI_API_KEY: nonEmptySecret,
-  GEMINI_CHAT_MODEL: modelName,
+  GEMINI_CHAT_MODEL: optionalText,
   GEMINI_EMBEDDING_MODEL: modelName,
   GEMINI_EMBEDDING_DIMENSION: z.coerce.number().int().positive().refine(
     (dimension) => dimension === 768,
     "harus bernilai 768",
   ),
 });
+
+const groqFieldsSchema = z.object({
+  GROQ_API_KEY: z.string().trim().min(20, "wajib berisi API key Groq yang valid"),
+  GROQ_BASE_URL: httpsUrl.default("https://api.groq.com/openai/v1"),
+  GROQ_MODEL: modelName.default("openai/gpt-oss-120b"),
+  GROQ_FALLBACK_MODEL: modelName.default("openai/gpt-oss-20b"),
+  GROQ_TERTIARY_MODEL: modelName.default("qwen/qwen3.6-27b"),
+});
+
+export const groqEnvSchema = baseEnvSchema.merge(groqFieldsSchema);
 
 export const supabaseEnvSchema = baseEnvSchema.extend({
   SUPABASE_URL: z.string().url().refine(
@@ -54,14 +64,11 @@ const agentFieldsSchema = z.object({
   INTERNAL_TOOL_PORT: z.coerce.number().int().min(1024).max(65535).default(3001),
   PANENIN_TOOL_SECRET: optionalText,
   PANENIN_RAG_TOOL_URL: loopbackUrl.default("http://127.0.0.1:3001/internal/tools/rag-query"),
-  OLAGON_API_KEY: optionalText,
-  OLAGON_API_URL: httpsUrl.default("https://gateway.olagon.site/anthropic/v1/messages"),
-  OLAGON_BASE_URL: httpsUrl.default("https://gateway.olagon.site/anthropic"),
-  OLAGON_MODEL_ID: optionalText,
 });
 
 export const agentEnvSchema = baseEnvSchema
   .merge(agentFieldsSchema)
+  .merge(groqFieldsSchema)
   .superRefine(validateEnabledAgentFields);
 
 export const internalToolEnvSchema = baseEnvSchema.extend({
@@ -77,6 +84,7 @@ export const olagonTestEnvSchema = baseEnvSchema.extend({
 });
 
 export const fullEnvSchema = geminiEnvSchema
+  .merge(groqEnvSchema)
   .merge(supabaseEnvSchema)
   .merge(fonnteEnvSchema)
   .merge(agentFieldsSchema)
@@ -84,6 +92,7 @@ export const fullEnvSchema = geminiEnvSchema
 
 export type BaseEnv = z.infer<typeof baseEnvSchema>;
 export type GeminiEnv = z.infer<typeof geminiEnvSchema>;
+export type GroqEnv = z.infer<typeof groqEnvSchema>;
 export type SupabaseEnv = z.infer<typeof supabaseEnvSchema>;
 export type FonnteEnv = z.infer<typeof fonnteEnvSchema>;
 export type AgentEnv = z.infer<typeof agentEnvSchema>;
@@ -97,6 +106,10 @@ export function parseBaseEnv(input: NodeJS.ProcessEnv = process.env): BaseEnv {
 
 export function parseGeminiEnv(input: NodeJS.ProcessEnv = process.env): GeminiEnv {
   return parseEnv(geminiEnvSchema, input);
+}
+
+export function parseGroqEnv(input: NodeJS.ProcessEnv = process.env): GroqEnv {
+  return parseEnv(groqEnvSchema, input);
 }
 
 export function parseSupabaseEnv(input: NodeJS.ProcessEnv = process.env): SupabaseEnv {
@@ -160,20 +173,16 @@ function validateEnabledAgentFields(
     | "OPENCLAW_MODEL"
     | "AGENT_SESSION_HMAC_SECRET"
     | "PANENIN_TOOL_SECRET"
-    | "OLAGON_API_KEY"
-    | "OLAGON_MODEL_ID"
   >> = [
     "OPENCLAW_GATEWAY_TOKEN",
     "OPENCLAW_MODEL",
     "AGENT_SESSION_HMAC_SECRET",
     "PANENIN_TOOL_SECRET",
-    "OLAGON_API_KEY",
-    "OLAGON_MODEL_ID",
   ];
 
   for (const field of required) {
     const value = data[field];
-    const minimum = field === "OPENCLAW_MODEL" || field === "OLAGON_MODEL_ID" ? 1 : 24;
+    const minimum = field === "OPENCLAW_MODEL" ? 1 : 24;
     if (value.length < minimum) {
       context.addIssue({
         code: z.ZodIssueCode.custom,

@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import type { MessageType, NormalizedIncomingMessage } from "../types/messaging.js";
 
-// TODO: Verify against actual sanitized Fonnte webhook payload.
+// Verified against a sanitized Fonnte personal-text webhook fixture on 17 July 2026.
 export function normalizeFonntePayload(payload: unknown): NormalizedIncomingMessage[] {
   const candidates = collectCandidates(payload);
   return candidates.flatMap((candidate) => normalizeCandidate(candidate));
@@ -29,14 +30,15 @@ function collectCandidates(payload: unknown): unknown[] {
 function normalizeCandidate(candidate: unknown): NormalizedIncomingMessage[] {
   if (!isRecord(candidate)) return [];
   if (isOutgoing(candidate)) return [];
-  const id = firstString(candidate, [
+  const id = firstStableIdentifier(candidate, [
     "id",
     "inboxid",
     "message_id",
     "messageId",
     "provider_message_id",
   ])
-    ?? nestedString(candidate, ["key", "id"]);
+    ?? stableNestedIdentifier(candidate, ["key", "id"])
+    ?? deriveStableWebhookId(candidate);
   const sender = firstString(candidate, ["sender", "from", "phone", "number", "target"])
     ?? nestedString(candidate, ["key", "remoteJid"]);
   if (!id || !sender) return [];
@@ -52,6 +54,40 @@ function normalizeCandidate(candidate: unknown): NormalizedIncomingMessage[] {
   };
   if (text) normalized.text = text.trim();
   return [normalized];
+}
+
+function firstStableIdentifier(
+  record: Record<string, unknown>,
+  keys: string[],
+): string | undefined {
+  const value = firstString(record, keys);
+  return isStableIdentifier(value) ? value : undefined;
+}
+
+function stableNestedIdentifier(
+  record: Record<string, unknown>,
+  path: string[],
+): string | undefined {
+  const value = nestedString(record, path);
+  return isStableIdentifier(value) ? value : undefined;
+}
+
+function isStableIdentifier(value: string | undefined): value is string {
+  return value !== undefined && value !== "0";
+}
+
+function deriveStableWebhookId(candidate: Record<string, unknown>): string | undefined {
+  const sender = firstString(candidate, ["sender", "from", "phone", "number", "target"])
+    ?? nestedString(candidate, ["key", "remoteJid"]);
+  const timestamp = firstString(candidate, ["timestamp", "message_timestamp", "messageTimestamp"]);
+  if (!sender || !timestamp) return undefined;
+  const message = firstString(candidate, ["message", "text", "body", "content"]) ?? "";
+  const type = firstString(candidate, ["type", "mode"]) ?? "";
+  const digest = createHash("sha256")
+    .update([sender, timestamp, type, message].join("\u001f"))
+    .digest("hex")
+    .slice(0, 32);
+  return `fonnte:${digest}`;
 }
 
 function isOutgoing(candidate: Record<string, unknown>): boolean {

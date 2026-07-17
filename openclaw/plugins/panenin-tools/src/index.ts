@@ -55,7 +55,7 @@ export function isAllowedToolUrl(value: string): boolean {
 export default defineToolPlugin({
   id: "panenin-tools",
   name: "Panenin Tools",
-  description: "Read-only access to the Panenin knowledge RAG service.",
+  description: "Read-only access to the Panenin knowledge RAG service through the loopback broker.",
   configSchema: Type.Object({
     toolUrl: Type.Optional(Type.String()),
   }, { additionalProperties: false }),

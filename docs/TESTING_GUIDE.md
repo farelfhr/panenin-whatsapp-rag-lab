@@ -9,16 +9,17 @@ npm test
 npm run build
 ```
 
-Unit test tidak melakukan network call. Gemini, Supabase, dan Fonnte diuji melalui dependency injection dan mock.
+Unit test tidak melakukan network call. Groq, Gemini embedding, Supabase, dan Fonnte diuji melalui dependency injection dan mock.
 
 ## Urutan milestone
 
 1. M0: selesaikan `MANUAL_SETUP_CHECKLIST.md` yang memerlukan dashboard.
-2. M1: `npm run test:gemini` dan `npm run test:embedding`.
+2. M1: `npm run test:groq` dan `npm run test:embedding`.
 3. M2: tambahkan `panenin_ai_lab` ke Exposed schemas, `npm run rag:ingest`, lalu `npm run rag:test -- "Bagaimana cara packing?"`.
 4. M3: `npm run fonnte:test -- 628...` dan uji normalizer dengan fixture tersanitasi.
 5. M4-M5: jalankan `npm run dev`, expose `/webhook/fonnte`, lalu uji `MENU`, `TANYA: ...`, `BATAL`, dan fallback dari WhatsApp.
-6. M6: catat payload aktual, hasil log yang sudah disanitasi, dan artefak handoff.
+6. M6: jalankan `npm run test:openclaw:natural` untuk memeriksa konteks, gaya, grounding, dan maksimal tiga prioritas.
+7. M7: catat payload aktual, hasil log yang sudah disanitasi, dan artefak handoff.
 
 ## Cakupan unit test
 
@@ -29,6 +30,7 @@ Unit test tidak melakukan network call. Gemini, Supabase, dan Fonnte diuji melal
 - Intent classifier: schema valid, threshold 0,80, dan JSON invalid.
 - Chunker: frontmatter dan overlap.
 - Auth: bearer token wajib, token invalid ditolak, response tidak membocorkan claim, dan method dibatasi ke GET.
+- OpenClaw: model fallback, satu cooldown retry 429, kontrak awal sesi, pengingat giliran, prompt lean, dan kebijakan percakapan natural.
 
 ## Uji payload aktual
 

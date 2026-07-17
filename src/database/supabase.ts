@@ -105,6 +105,10 @@ export class SupabaseKnowledgeRepository implements KnowledgeRepository {
 
 export interface WebhookStore {
   claimIncoming(message: NormalizedIncomingMessage, sanitizedRaw: unknown): Promise<boolean>;
+  markIncomingStatus(
+    providerMessageId: string,
+    status: "processed" | "failed",
+  ): Promise<void>;
   resetSession(sender: string): Promise<void>;
 }
 
@@ -126,6 +130,22 @@ export class SupabaseWebhookStore implements WebhookStore {
       "Supabase gagal menyimpan incoming message",
       error,
     );
+  }
+
+  public async markIncomingStatus(
+    providerMessageId: string,
+    status: "processed" | "failed",
+  ): Promise<void> {
+    const { error } = await this.client
+      .from("incoming_messages")
+      .update({ status })
+      .eq("provider_message_id", providerMessageId);
+    if (error) {
+      throw createSupabaseOperationError(
+        "Supabase gagal memperbarui status incoming message",
+        error,
+      );
+    }
   }
 
   public async resetSession(sender: string): Promise<void> {
