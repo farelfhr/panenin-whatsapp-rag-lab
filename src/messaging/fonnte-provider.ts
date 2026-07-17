@@ -4,7 +4,11 @@ import { normalizeFonntePayload } from "../webhook/normalize-fonnte-payload.js";
 
 const fonnteResponseSchema = z.object({
   status: z.union([z.boolean(), z.string()]).optional(),
-  id: z.union([z.string(), z.number()]).optional(),
+  id: z.union([
+    z.string(),
+    z.number(),
+    z.array(z.union([z.string(), z.number()])),
+  ]).optional(),
   detail: z.string().optional(),
 }).passthrough();
 
@@ -45,7 +49,13 @@ export class FonnteProvider implements MessagingProvider {
       }
       const body = fonnteResponseSchema.safeParse(rawBody);
       if (!body.success) throw new Error("Fonnte response tidak valid");
-      const providerMessageId = body.data.id === undefined ? undefined : String(body.data.id);
+      const rawProviderMessageId = body.data.id;
+      const providerMessageIdValue = Array.isArray(rawProviderMessageId)
+        ? rawProviderMessageId[0]
+        : rawProviderMessageId;
+      const providerMessageId = providerMessageIdValue === undefined
+        ? undefined
+        : String(providerMessageIdValue);
       return providerMessageId ? { providerMessageId } : {};
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") {

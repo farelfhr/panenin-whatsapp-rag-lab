@@ -1,12 +1,14 @@
 import type { MessagingProvider, NormalizedIncomingMessage } from "../types/messaging.js";
 import { sanitizePayload } from "./sanitize.js";
 import type { WebhookStore } from "../database/supabase.js";
-import type { ConversationRouter } from "../conversation/router.js";
+export interface ConversationRouterLike {
+  route(input: { sender: string; text: string }): Promise<string>;
+}
 
 export interface WebhookHandlerDependencies {
   provider: MessagingProvider;
   store: WebhookStore;
-  router: ConversationRouter;
+  router: ConversationRouterLike;
   webhookSecret?: string;
   schedule?: (task: () => Promise<void>) => void;
   logError?: (message: string) => void;

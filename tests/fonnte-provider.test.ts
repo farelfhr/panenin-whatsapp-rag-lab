@@ -11,6 +11,19 @@ describe("FonnteProvider", () => {
     await expect(provider.sendText({ to: "628", text: "halo" })).resolves.toEqual({ providerMessageId: "out-1" });
   });
 
+  it("menerima response sukses Fonnte dengan id array", async () => {
+    const provider = new FonnteProvider({
+      token: "secret-token",
+      fetchFn: vi.fn(async () => new Response(JSON.stringify({
+        status: true,
+        id: ["out-array-1"],
+        process: "pending",
+      }), { status: 200 })),
+    });
+
+    await expect(provider.sendText({ to: "628", text: "halo" })).resolves.toEqual({ providerMessageId: "out-array-1" });
+  });
+
   it("menangani HTTP non-2xx", async () => {
     const provider = new FonnteProvider({ token: "secret-token", fetchFn: vi.fn(async () => new Response("bad", { status: 500 })) });
     await expect(provider.sendText({ to: "628", text: "halo" })).rejects.toThrow("HTTP error 500");

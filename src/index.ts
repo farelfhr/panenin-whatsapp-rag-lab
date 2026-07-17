@@ -15,6 +15,9 @@ import {
 import { FonnteProvider } from "./messaging/fonnte-provider.js";
 import { SupabaseRetriever } from "./rag/retrieve.js";
 import { ConversationRouter } from "./conversation/router.js";
+import { HybridConversationRouter } from "./conversation/hybrid-router.js";
+import { OpenClawClient } from "./agent/openclaw-client.js";
+import { createAgentSessionId } from "./agent/session-id.js";
 import { createWebhookHandler } from "./webhook/handler.js";
 
 export function createLabServer() {
@@ -26,7 +29,21 @@ export function createLabServer() {
   const authVerifier = new SupabaseAuthVerifier(createSupabaseAuthClient(env));
   const provider = new FonnteProvider({ token: env.FONNTE_TOKEN });
   const retriever = new SupabaseRetriever(repository, new GeminiEmbeddingService(client, env.GEMINI_EMBEDDING_DIMENSION));
-  const router = new ConversationRouter({ retriever, gateway: client, sessionStore: store });
+  const localRouter = new ConversationRouter({ retriever, gateway: client, sessionStore: store });
+  const router = new HybridConversationRouter({
+    localRouter,
+    enabled: env.OPENCLAW_ENABLED,
+    ...(env.OPENCLAW_ENABLED
+      ? {
+          agentGateway: new OpenClawClient({
+            gatewayUrl: env.OPENCLAW_GATEWAY_URL,
+            gatewayToken: env.OPENCLAW_GATEWAY_TOKEN,
+            model: env.OPENCLAW_MODEL,
+          }),
+          sessionIdFactory: (sender: string) => createAgentSessionId(sender, env.AGENT_SESSION_HMAC_SECRET),
+        }
+      : {}),
+  });
   const webhook = createWebhookHandler({ provider, store, router, webhookSecret: env.FONNTE_WEBHOOK_SECRET, logError: (message) => console.error(message) });
 
   return createServer(async (request, response) => {

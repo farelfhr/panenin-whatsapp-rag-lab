@@ -8,11 +8,12 @@ Lab ini tidak menyentuh repository aplikasi utama, tidak membuat listing, tidak 
 
 ```text
 WhatsApp user -> Fonnte -> POST /webhook/fonnte -> normalize/sanitize -> dedup
-                                                     -> deterministic router
+                                                     -> hybrid router (feature flag)
                                                         MENU/HELP/BANTUAN -> menu
-                                                        TANYA: -> embed -> pgvector RPC -> Gemini -> source-aware reply
+                                                        TANYA: -> OpenClaw -> read-only RAG tool
+                                                               -> fallback RAG lokal
                                                         BATAL -> reset session
-                                                        other -> fallback
+                                                        other -> OpenClaw / fallback
                                                      -> Fonnte send text -> user
 ```
 
@@ -20,7 +21,7 @@ Komponen provider tidak menyimpan business logic. Webhook memberi acknowledgemen
 
 ## Requirement
 
-- Node.js 20 atau lebih baru
+- Node.js 20 atau lebih baru untuk lab; gateway OpenClaw 2026.7.1 dijalankan dengan Node 24.15 atau lebih baru
 - TypeScript strict
 - `@google/genai`, `@supabase/supabase-js`, `zod`, `dotenv`, Vitest
 - Supabase pgvector dengan embedding 768 dimensi
@@ -69,6 +70,13 @@ npm run rag:test -- "Bagaimana cara packing?"
 npm run fonnte:test -- 6281234567890
 npm run fonnte:inspect -- tests/fixtures/fonnte-text-message.json
 npm run dev             # HTTP server lokal pada PORT atau 3000
+npm run dev:tools       # internal RAG tool pada 127.0.0.1:3001
+npm run openclaw:gateway # OpenClaw gateway dengan env repo + Node portable
+npm run test:olagon     # smoke test jaringan Olagon
+npm run test:openclaw   # smoke test gateway OpenClaw
+npm run test:openclaw:rag # smoke test OpenClaw -> plugin -> RAG
+npm run plugin:test
+npm run plugin:validate
 ```
 
 Script integrasi akan berhenti dengan error yang jelas bila key, model, project, atau device belum tersedia. Jangan membuat credential palsu.
@@ -88,11 +96,17 @@ Jika tidak ada match atau context tidak cukup, jawaban kanonik adalah `Maaf, pan
 
 ## Fonnte dan webhook lokal
 
-`FonnteProvider` membungkus endpoint send, timeout, HTTP non-2xx, dan tidak me-retry send secara otomatis. Normalizer defensif menerima bentuk payload umum sebagai hipotesis; field aktual wajib dikonfirmasi dari satu payload yang disanitasi. Lihat TODO di `src/webhook/normalize-fonnte-payload.ts`.
+`FonnteProvider` membungkus endpoint send, timeout, HTTP non-2xx, menormalisasi response provider ID string/angka/array, dan tidak me-retry send secara otomatis. Normalizer defensif menerima bentuk payload umum sebagai hipotesis; field aktual wajib dikonfirmasi dari satu payload yang disanitasi. Lihat TODO di `src/webhook/normalize-fonnte-payload.ts`.
 
 Jalankan `npm run dev`, lalu expose `POST /webhook/fonnte` dengan tunnel publik (misalnya Cloudflare Tunnel) atau deployment sementara yang disetujui tim. Masukkan URL lengkap `https://<public-host>/webhook/fonnte?token=<url-encoded-FONNTE_WEBHOOK_SECRET>` ke field Webhook Fonnte bila provider tidak mengirim custom header. Jangan mencetak URL tersebut ke log. Laptop harus tetap menyala bila memakai tunnel lokal. `GET /health` tersedia untuk smoke test.
 
 Jangan bergantung pada tombol interaktif WhatsApp atau attachment paket gratis. Demo awal berbasis teks.
+
+## OpenClaw (opsional)
+
+Integrasi OpenClaw dikendalikan oleh `OPENCLAW_ENABLED`. Nilai default `false` mempertahankan router lama. Ketika aktif, gateway hanya berjalan pada loopback, nomor WhatsApp diubah menjadi session HMAC, dan agent hanya diizinkan memakai tool read-only `panenin_rag_query`. Plugin tidak menerima credential Supabase, Gemini, atau Fonnte.
+
+Mulai dari [arsitektur integrasi](docs/OPENCLAW_INTEGRATION.md), [setup manual Windows](docs/OPENCLAW_MANUAL_SETUP.md), [security boundary](docs/OPENCLAW_SECURITY.md), dan [test matrix](docs/OPENCLAW_TEST_MATRIX.md). Jangan tunnel port OpenClaw `18789` atau internal tool `3001`; hanya endpoint webhook aplikasi yang boleh dipublikasikan.
 
 ## Log dan troubleshooting
 
@@ -109,6 +123,6 @@ Log tidak boleh berisi token, key, raw payload lengkap, atau nomor lengkap. Guna
 
 ## Batasan dan handoff
 
-AI hanya mengklasifikasikan atau menjawab RAG. Router awal hanya `MENU`, `HELP`, `BANTUAN`, `TANYA:`, `BATAL`, dan fallback. Tidak ada `CREATE_LISTING`, `UPDATE_STOCK`, `ACCEPT_ORDER`, payment, atau withdrawal.
+AI hanya mengklasifikasikan, menjawab RAG, atau menyusun draft percakapan. Router mempertahankan `MENU`, `HELP`, `BANTUAN`, `TANYA:`, `BATAL`, dan fallback. OpenClaw hanya memiliki tool knowledge read-only. Tidak ada `CREATE_LISTING`, `UPDATE_STOCK`, `ACCEPT_ORDER`, payment, atau withdrawal.
 
 Saat repository utama siap, pindahkan hanya adapter, kontrak normalized message/RAG, migration, ingestion, fixture, dan test yang telah direview. Jangan menyalin seluruh lab. Lihat [handoff guide](docs/HANDOFF_GUIDE.md) dan [testing guide](docs/TESTING_GUIDE.md).

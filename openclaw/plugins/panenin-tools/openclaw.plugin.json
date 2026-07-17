@@ -1,0 +1,28 @@
+{
+  "id": "panenin-tools",
+  "name": "Panenin Tools",
+  "description": "Read-only access to the Panenin knowledge RAG service.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "toolUrl": {
+        "type": "string"
+      }
+    },
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "contracts": {
+    "tools": [
+      "panenin_rag_query"
+    ]
+  },
+  "toolMetadata": {
+    "panenin_rag_query": {
+      "optional": true
+    }
+  }
+}

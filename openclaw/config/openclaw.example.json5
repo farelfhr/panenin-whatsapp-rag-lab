@@ -1,0 +1,57 @@
+{
+  // Salin manual ke konfigurasi OpenClaw Anda. Jangan simpan nilai secret di file ini.
+  agents: {
+    defaults: {
+      workspace: "D:/Dev/panenin-whatsapp-rag-lab/openclaw/workspace",
+      model: {
+        primary: "anthropic/claude-3-5-sonnet",
+      },
+    },
+  },
+  models: {
+    mode: "merge",
+    providers: {
+      anthropic: {
+        baseUrl: "https://gateway.olagon.site/anthropic",
+        apiKey: "${ANTHROPIC_API_KEY}",
+        api: "anthropic-messages",
+        timeoutSeconds: 120,
+        models: [
+          {
+            id: "claude-3-5-sonnet",
+            name: "Claude 3.5 Sonnet via Olagon",
+            reasoning: false,
+            input: ["text"],
+            contextWindow: 200000,
+            maxTokens: 8192,
+          },
+        ],
+      },
+    },
+  },
+  gateway: {
+    mode: "local",
+    bind: "loopback",
+    port: 18789,
+    auth: { mode: "token" },
+    http: {
+      endpoints: {
+        chatCompletions: { enabled: true },
+      },
+    },
+  },
+  plugins: {
+    allow: ["panenin-tools"],
+    entries: {
+      "panenin-tools": {
+        enabled: true,
+        config: {
+          toolUrl: "${PANENIN_RAG_TOOL_URL}",
+        },
+      },
+    },
+  },
+  tools: {
+    allow: ["panenin_rag_query"],
+  },
+}
